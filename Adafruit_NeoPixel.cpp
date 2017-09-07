@@ -1813,6 +1813,93 @@ void Adafruit_NeoPixel::show(void) {
     }
   }
 
+#elif defined(__RISCV_OPENV__)
+
+// RISC-V Open-V  ---------------------------------------------------------
+
+// NOTE: Copied from the SAMD21XXX
+#if F_CPU == 25000000
+  // Tried this with a timer/counter, couldn't quite get adequate
+  // resolution.  So yay, you get a load of goofball NOPs...
+
+  uint8_t  *ptr, *end, p, bitMask;
+  uint32_t  pinMask;
+  
+  #define ADDR_GPIO ((uint32_t*)0x1040)
+  
+  if(pin >= OPENV_MAX_PINS) return;
+  
+  ptr     =  pixels;
+  end     =  ptr + numBytes;
+  p       = *ptr++;
+  bitMask =  0x80;
+
+  volatile uint32_t *port = ADDR_GPIO+pin;
+
+#ifdef NEO_KHZ400 // 800 KHz check needed only if 400 KHz support enabled
+  if(is800KHz) {
+#endif
+    for(;;) {
+      *port = 0x3;
+      asm("nop; nop; nop; nop; nop; nop; nop; nop;");
+      if(p & bitMask) {
+        asm("nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop; nop;");
+        *port = 0x2;
+      } else {
+        *port = 0x2;
+        asm("nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop; nop;");
+      }
+      if(bitMask >>= 1) {
+        asm("nop; nop; nop; nop; nop; nop; nop; nop; nop;");
+      } else {
+        if(ptr >= end) break;
+        p       = *ptr++;
+        bitMask = 0x80;
+      }
+    }
+#ifdef NEO_KHZ400
+  } else { // 400 KHz bitstream
+    for(;;) {
+      *port = 0x3;
+      asm("nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop;");
+      if(p & bitMask) {
+        asm("nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop;");
+        *port = 0x2;
+      } else {
+        *port = 0x2;
+        asm("nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop; nop; nop; nop; nop; nop;"
+            "nop; nop; nop;");
+      }
+      asm("nop; nop; nop; nop; nop; nop; nop; nop;"
+          "nop; nop; nop; nop; nop; nop; nop; nop;"
+          "nop; nop; nop; nop; nop; nop; nop; nop;"
+          "nop; nop; nop; nop; nop; nop; nop; nop;");
+      if(bitMask >>= 1) {
+        asm("nop; nop; nop; nop; nop; nop; nop;");
+      } else {
+        if(ptr >= end) break;
+        p       = *ptr++;
+        bitMask = 0x80;
+      }
+    }
+  }
+#endif
+
+#else
+#error "Sorry, only 25 MHz is supported, please set Tools > CPU Speed to 48 MHz"
+#endif // F_CPU == 25000000
+
+// NO ARCHITECTURE  -------------------------------------------------------
+
 #else 
 #error Architecture not supported
 #endif
